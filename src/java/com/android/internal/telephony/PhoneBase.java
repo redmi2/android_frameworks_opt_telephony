@@ -2537,12 +2537,17 @@ public abstract class PhoneBase extends Handler implements Phone {
     public void sendSubscriptionSettings(boolean restoreNetworkSelection) {
         // Send settings down
         int type = PhoneFactory.calculatePreferredNetworkType(mContext, getSubId());
+        int DUMMY_SUB_ID_BASE = SubscriptionManager.MAX_SUBSCRIPTION_ID_VALUE
+                - PhoneConstants.MAX_PHONE_COUNT_TRI_SIM;
         setPreferredNetworkType(type, null);
 
         if (restoreNetworkSelection) {
             restoreSavedNetworkSelection(null);
         }
-        mDcTracker.setDataEnabled(getDataEnabled());
+        if (SubscriptionManager.isValidSubscriptionId(getSubId())
+                && getSubId() < DUMMY_SUB_ID_BASE) {
+            mDcTracker.setDataEnabled(getDataEnabled());
+        }
     }
 
     protected void setPreferredNetworkTypeIfSimLoaded() {
