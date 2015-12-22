@@ -111,7 +111,7 @@ public class ImsPhone extends ImsPhoneBase {
     protected static final int EVENT_GET_CALL_WAITING_DONE          = EVENT_LAST + 4;
     protected static final int EVENT_SET_CLIR_DONE                  = EVENT_LAST + 5;
     protected static final int EVENT_GET_CLIR_DONE                  = EVENT_LAST + 6;
-    private static final int EVENT_DEFAULT_PHONE_DATA_STATE_CHANGED  = EVENT_LAST + 7;
+    protected static final int EVENT_DEFAULT_PHONE_DATA_STATE_CHANGED  = EVENT_LAST + 7;
 
     public static final String CS_FALLBACK = "cs_fallback";
 
@@ -149,7 +149,7 @@ public class ImsPhone extends ImsPhoneBase {
     private boolean mImsRegistered = false;
 
     // List of Registrants to send supplementary service notifications to.
-    RegistrantList mSsnRegistrants = new RegistrantList();
+    private RegistrantList mSsnRegistrants = new RegistrantList();
 
     // A runnable which is used to automatically exit from Ecm after a period of time.
     private Runnable mExitEcmRunnable = new Runnable() {
@@ -265,14 +265,16 @@ public class ImsPhone extends ImsPhoneBase {
     }
 
     public boolean getCallForwardingIndicator() {
-        boolean cf = false;
+        int callForwardingIndicator = IccRecords.CALL_FORWARDING_STATUS_UNKNOWN;
         IccRecords r = getIccRecords();
         if (r != null && r.isCallForwardStatusStored()) {
-            cf = r.getVoiceCallForwardingFlag();
-        } else {
-            cf = getCallForwardingPreference();
+            callForwardingIndicator = r.getVoiceCallForwardingFlag();
         }
-        return cf;
+
+        if (callForwardingIndicator == IccRecords.CALL_FORWARDING_STATUS_UNKNOWN) {
+            callForwardingIndicator = getVoiceCallForwardingFlag();
+        }
+        return (callForwardingIndicator == IccRecords.CALL_FORWARDING_STATUS_ENABLED);
     }
 
     /**
@@ -793,7 +795,10 @@ public class ImsPhone extends ImsPhoneBase {
     public void setOutgoingCallerIdDisplay(int clirMode, Message onComplete) {
         if (DBG) Rlog.d(LOG_TAG, "setCLIR action= " + clirMode);
         Message resp;
-        resp = obtainMessage(EVENT_SET_CLIR_DONE, onComplete);
+        // Packing CLIR value in the message. This will be required for
+        // SharedPreference caching, if the message comes back as part of
+        // a success response.
+        resp = obtainMessage(EVENT_SET_CLIR_DONE, clirMode, 0, onComplete);
         try {
             ImsUtInterface ut = mCT.getUtInterface();
             ut.updateCLIR(clirMode, resp);
@@ -1203,14 +1208,14 @@ public class ImsPhone extends ImsPhoneBase {
             if (r != null) {
                 // Assume the default is not active
                 // Set unconditional CFF in SIM to false
-                r.setVoiceCallForwardingFlag(1, false, null);
+                setVoiceCallForwardingFlag(r, 1, false, null);
             }
         } else {
             for (int i = 0, s = infos.length; i < s; i++) {
                 if (infos[i].mCondition == ImsUtInterface.CDIV_CF_UNCONDITIONAL) {
                     if (r != null) {
                         setCallForwardingPreference(infos[i].mStatus == 1);
-                        r.setVoiceCallForwardingFlag(1, (infos[i].mStatus == 1),
+                        setVoiceCallForwardingFlag(r, 1, (infos[i].mStatus == 1),
                             infos[i].mNumber);
                     }
                 }
@@ -1250,6 +1255,9 @@ public class ImsPhone extends ImsPhoneBase {
             CommandException ex = null;
             if (e != null) {
                 ex = getCommandException(e);
+                AsyncResult.forMessage(onComplete, result, ex);
+            } else {
+                AsyncResult.forMessage(onComplete, result, null);
             }
             AsyncResult.forMessage(onComplete, result, ex);
             onComplete.sendToTarget();
@@ -1278,7 +1286,7 @@ public class ImsPhone extends ImsPhoneBase {
                 Cf cf = (Cf) ar.userObj;
                 if (cf.mIsCfu && ar.exception == null && r != null) {
                     setCallForwardingPreference(msg.arg1 == 1);
-                    r.setVoiceCallForwardingFlag(1, msg.arg1 == 1, cf.mSetCfNumber);
+                    setVoiceCallForwardingFlag(r, 1, msg.arg1 == 1, cf.mSetCfNumber);
                 }
                 sendResponse(cf.mOnComplete, null, ar.exception);
                 updateCallForwardStatus();
@@ -1316,6 +1324,10 @@ public class ImsPhone extends ImsPhoneBase {
                 break;
 
              case EVENT_SET_CLIR_DONE:
+                 if (ar.exception == null) {
+                     saveClirSetting(msg.arg1);
+                 }
+                 // (Intentional fallthrough)
              case EVENT_SET_CALL_BARRING_DONE:
              case EVENT_SET_CALL_WAITING_DONE:
                 sendResponse((Message) ar.userObj, null, ar.exception);
