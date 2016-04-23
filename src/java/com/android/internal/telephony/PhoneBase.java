@@ -2793,6 +2793,16 @@ public abstract class PhoneBase extends Handler implements Phone {
     }
 
     @Override
+    public boolean isVideoWifiCallingEnabled() {
+        ImsPhone imsPhone = mImsPhone;
+        if ((imsPhone != null)
+                && (imsPhone.getServiceState().getState() == ServiceState.STATE_IN_SERVICE)) {
+            return imsPhone.isVideoWifiCallingEnabled();
+        }
+        return false;
+    }
+
+    @Override
     public int getLceStatus() {
         return mLceStatus;
     }

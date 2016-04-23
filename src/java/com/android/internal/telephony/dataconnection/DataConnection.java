@@ -985,6 +985,10 @@ public class DataConnection extends StateMachine {
                         result.addCapability(NetworkCapabilities.NET_CAPABILITY_IA);
                         break;
                     }
+                    case PhoneConstants.APN_TYPE_EMERGENCY: {
+                        result.addCapability(NetworkCapabilities.NET_CAPABILITY_EIMS);
+                        break;
+                    }
                     default:
                 }
             }
@@ -1501,11 +1505,7 @@ public class DataConnection extends StateMachine {
                                 break;
                             }
                         } else {
-                            // We've lost the connection and we're retrying but DRS or RAT changed
-                            // so we may never succeed, might as well give up.
-                            mInactiveState.setEnterNotificationParams(DcFailCause.LOST_CONNECTION);
-                            deferMessage(msg);
-                            transitionTo(mInactiveState);
+                            handlePdpRetryOnConnectionLoss(msg);
 
                             if (DBG) {
                                 String s = "DcRetryingState: "
@@ -2357,5 +2357,13 @@ public class DataConnection extends StateMachine {
             ConnectionParams cp) {
         if (DBG) log("isPdpRejectCauseFailureHandled()");
         return false;
+    }
+
+    protected void handlePdpRetryOnConnectionLoss(Message msg) {
+        // We've lost the connection and we're retrying but DRS or RAT changed
+        // so we may never succeed, might as well give up.
+        mInactiveState.setEnterNotificationParams(DcFailCause.LOST_CONNECTION);
+        deferMessage(msg);
+        transitionTo(mInactiveState);
     }
 }
